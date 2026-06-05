@@ -3,12 +3,12 @@ import { execSync } from 'node:child_process';
 import { App, Aspects, Mixins, RemovalPolicies, Tags } from 'aws-cdk-lib';
 import { mixins as s3Mixins } from 'aws-cdk-lib/aws-s3';
 import { AwsSolutionsChecks, ServerlessChecks } from 'cdk-nag';
+import { MoimetricStack } from '../lib/moimetric.ts';
 import {
   APPLICATION_RESOURCE_SCOPE_TAG_VALUE,
   RESOURCE_SCOPE_TAG_KEY,
 } from '../lib/resource-tags.ts';
 import { resolveStageLifecycle, resolveStageName } from '../lib/stage-name.ts';
-import { TanstackAwsStack } from '../lib/tanstack-aws.ts';
 import { WORKLOAD_REGION } from '../lib/workload-region.ts';
 
 const workloadAccount = process.env.CDK_DEFAULT_ACCOUNT;
@@ -43,7 +43,7 @@ const appLifecycle = resolveStageLifecycle(appStage);
 // oxlint-disable-next-line no-console
 console.log(`Deploying to stage: ${appStage} in region: ${WORKLOAD_REGION}`);
 
-new TanstackAwsStack(app, `TanstackAwsStack-${appStage}`, {
+new MoimetricStack(app, `MoimetricStack-${appStage}`, {
   appStage,
   env: { account: workloadAccount, region: WORKLOAD_REGION },
 });

@@ -98,7 +98,7 @@ exports[`GitHubActionsOidcSetup > creates the GitHub OIDC provider and a repo-sc
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
                 },
                 "StringLike": {
-                  "token.actions.githubusercontent.com:sub": "repo:JohannesKonings/tanstack-aws:*",
+                  "token.actions.githubusercontent.com:sub": "repo:mdchad/moimetric:*",
                 },
               },
               "Effect": "Allow",
@@ -111,7 +111,7 @@ exports[`GitHubActionsOidcSetup > creates the GitHub OIDC provider and a repo-sc
           ],
           "Version": "2012-10-17",
         },
-        "Description": "Allows GitHub Actions from JohannesKonings/tanstack-aws to deploy CDK stacks.",
+        "Description": "Allows GitHub Actions from mdchad/moimetric to deploy CDK stacks.",
         "RoleName": "GitHubActionsCdkDeployRole",
       },
       "Type": "AWS::IAM::Role",

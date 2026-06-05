@@ -1,3 +1,32 @@
+import { createFileRoute } from '@tanstack/react-router';
+
+// -----------------------------------------------------------------------------
+// Amazon Bedrock AI chat is DISABLED for now.
+// This handler short-circuits so the app runs without AWS credentials / Bedrock
+// model access. The original Bedrock-backed implementation is preserved in the
+// comment block at the bottom of this file — restore it (and its imports) to
+// re-enable.
+// -----------------------------------------------------------------------------
+
+export const Route = createFileRoute('/demo/api/tanchat')({
+  server: {
+    handlers: {
+      POST: async () =>
+        new Response(
+          JSON.stringify({
+            error: 'AI chat is disabled',
+            code: 'BEDROCK_DISABLED',
+          }),
+          {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+    },
+  },
+});
+
+/* === Original Bedrock-backed implementation (disabled) =======================
 import type { ModelMessage, UIMessage } from '@tanstack/ai';
 import { chat, convertMessagesToModelMessages, toServerSentEventsResponse } from '@tanstack/ai';
 import { maxIterations } from '@tanstack/ai';
@@ -96,3 +125,4 @@ export const Route = createFileRoute('/demo/api/tanchat')({
     },
   },
 });
+============================================================================ */

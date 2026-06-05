@@ -31,8 +31,8 @@ export type AccountSetupEnv = z.infer<typeof accountSetupEnvSchema>;
 export const githubActionsOidcConfig = {
   oidcUrl: 'https://token.actions.githubusercontent.com',
   oidcAudience: 'sts.amazonaws.com',
-  allowedRepository: 'JohannesKonings/tanstack-aws',
-  allowedRepositorySub: 'repo:JohannesKonings/tanstack-aws:*',
+  allowedRepository: 'mdchad/moimetric',
+  allowedRepositorySub: 'repo:mdchad/moimetric:*',
 } as const;
 export type GitHubActionsOidcConfig = typeof githubActionsOidcConfig;
 type AccountSetupEnvFallbackSource =

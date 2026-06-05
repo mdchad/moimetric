@@ -1,4 +1,4 @@
-# TanStack AWS Examples
+# Moimetric Examples
 
 This repository contains examples demonstrating how to use [TanStack libraries](https://tanstack.com/) (Start, Router, DB, AI) in combination with AWS services for building serverless web applications.
 Provisioning of AWS resources is handled using [AWS CDK](https://aws.amazon.com/cdk/).

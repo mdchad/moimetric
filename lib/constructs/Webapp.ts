@@ -38,15 +38,15 @@ export class Webapp extends Construct {
 
     const auroraClusterArn = ssm.StringParameter.valueForStringParameter(
       this,
-      '/tanstack-aws/shared/aurora/cluster-arn',
+      '/moimetric/shared/aurora/cluster-arn',
     );
     const auroraSecretArn = ssm.StringParameter.valueForStringParameter(
       this,
-      '/tanstack-aws/shared/aurora/secret-arn',
+      '/moimetric/shared/aurora/secret-arn',
     );
     const auroraDatabaseName = ssm.StringParameter.valueForStringParameter(
       this,
-      '/tanstack-aws/shared/aurora/database-name',
+      '/moimetric/shared/aurora/database-name',
     );
     const auroraSchema = resolveAuroraSchemaName(props.appStage);
     const appLifecycle = resolveStageLifecycle(props.appStage);

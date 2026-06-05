@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`TanstackAwsStack synth lifecycle behavior > matches public-safe snapshot for ephemeral stage 1`] = `
+exports[`MoimetricStack synth lifecycle behavior > matches public-safe snapshot for ephemeral stage 1`] = `
 {
   "Parameters": {
     "BootstrapVersion": {
@@ -210,7 +210,7 @@ exports[`TanstackAwsStack synth lifecycle behavior > matches public-safe snapsho
 }
 `;
 
-exports[`TanstackAwsStack synth lifecycle behavior > matches public-safe snapshot for permanent stage 1`] = `
+exports[`MoimetricStack synth lifecycle behavior > matches public-safe snapshot for permanent stage 1`] = `
 {
   "Parameters": {
     "BootstrapVersion": {

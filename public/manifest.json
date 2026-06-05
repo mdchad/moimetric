@@ -1,7 +1,7 @@
 {
-  "short_name": "TanStack AWS",
-  "name": "TanStack AWS Examples - Deployed with AWS CDK",
-  "description": "TanStack AWS Examples showcasing TanStack Router, Query, and Start deployed to AWS using CDK. Examples with serverless architecture, DynamoDB, CloudFront, and Lambda.",
+  "short_name": "Moimetric",
+  "name": "Moimetric Examples - Deployed with AWS CDK",
+  "description": "Moimetric Examples showcasing TanStack Router, Query, and Start deployed to AWS using CDK. Examples with serverless architecture, DynamoDB, CloudFront, and Lambda.",
   "icons": [
     {
       "src": "images/favicon.ico",

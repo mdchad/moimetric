@@ -45,7 +45,7 @@ const synthesizeArtifact = (branchOrStageName: string) => {
     lifecycle: 'permanent',
   });
   const appLifecycle = resolveStageLifecycle(appStage);
-  const stack = new MinimalTestStack(app, `TanstackAwsStack-${appStage}`, {
+  const stack = new MinimalTestStack(app, `MoimetricStack-${appStage}`, {
     appStage,
     env: {
       account: '123456789012',
@@ -94,7 +94,7 @@ const synthesizeTemplate = (branchOrStageName: string) => {
   return snapshotSafeTemplate(synthesize(branchOrStageName));
 };
 
-describe('TanstackAwsStack synth lifecycle behavior', () => {
+describe('MoimetricStack synth lifecycle behavior', () => {
   it('matches public-safe snapshot for ephemeral stage', () => {
     expect(synthesizeTemplate('feature/main')).toMatchSnapshot();
   }, 60_000);

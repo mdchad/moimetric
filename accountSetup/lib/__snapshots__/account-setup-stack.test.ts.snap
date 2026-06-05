@@ -113,7 +113,7 @@ exports[`AccountSetupStack > creates GitHub OIDC deployment resources for this r
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
                 },
                 "StringLike": {
-                  "token.actions.githubusercontent.com:sub": "repo:JohannesKonings/tanstack-aws:*",
+                  "token.actions.githubusercontent.com:sub": "repo:mdchad/moimetric:*",
                 },
               },
               "Effect": "Allow",
@@ -126,7 +126,7 @@ exports[`AccountSetupStack > creates GitHub OIDC deployment resources for this r
           ],
           "Version": "2012-10-17",
         },
-        "Description": "Allows GitHub Actions from JohannesKonings/tanstack-aws to deploy CDK stacks.",
+        "Description": "Allows GitHub Actions from mdchad/moimetric to deploy CDK stacks.",
         "RoleName": "GitHubActionsCdkDeployRole",
       },
       "Type": "AWS::IAM::Role",
@@ -460,7 +460,7 @@ exports[`WorkloadRegionAccountSetupStack > creates shared Aurora PostgreSQL Serv
   "Resources": {
     "SharedAuroraClusterArnParameterD7B51CC3": {
       "Properties": {
-        "Name": "/tanstack-aws/shared/aurora/cluster-arn",
+        "Name": "/moimetric/shared/aurora/cluster-arn",
         "Type": "String",
         "Value": {
           "Fn::Join": [
@@ -482,7 +482,7 @@ exports[`WorkloadRegionAccountSetupStack > creates shared Aurora PostgreSQL Serv
     },
     "SharedAuroraDatabaseNameParameter3F37762D": {
       "Properties": {
-        "Name": "/tanstack-aws/shared/aurora/database-name",
+        "Name": "/moimetric/shared/aurora/database-name",
         "Type": "String",
         "Value": "tanstackaws",
       },
@@ -811,7 +811,7 @@ exports[`WorkloadRegionAccountSetupStack > creates shared Aurora PostgreSQL Serv
     },
     "SharedAuroraSecretArnParameter8AEC77FC": {
       "Properties": {
-        "Name": "/tanstack-aws/shared/aurora/secret-arn",
+        "Name": "/moimetric/shared/aurora/secret-arn",
         "Type": "String",
         "Value": {
           "Ref": "SharedAuroraPostgresServerlessV2ClusterSecretAttachmentB6A97D29",

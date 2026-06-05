@@ -17,12 +17,12 @@ interface MyRouterContext {
   trpc: TRPCOptionsProxy<TRPCRouter>;
 }
 
-const siteTitle = 'TanStack AWS Examples - Deployed with AWS CDK';
+const siteTitle = 'Moimetric Examples - Deployed with AWS CDK';
 const siteDescription =
-  'Explore TanStack AWS Examples showcasing TanStack Router, Query, and Start deployed to AWS using CDK. Examples featuring serverless architecture, DynamoDB, CloudFront, Lambda, and infrastructure as code.';
-const siteUrl = 'https://tanstack-aws-examples.com';
+  'Explore Moimetric Examples showcasing TanStack Router, Query, and Start deployed to AWS using CDK. Examples featuring serverless architecture, DynamoDB, CloudFront, Lambda, and infrastructure as code.';
+const siteUrl = 'https://moimetric.com';
 const siteKeywords =
-  'TanStack AWS Examples, TanStack Router, TanStack Query, TanStack Start, AWS CDK, AWS Lambda, DynamoDB, CloudFront, S3, Infrastructure as Code, IaC, TypeScript, React, Serverless, Full-Stack, CDK Constructs, ElectroDB, tRPC';
+  'Moimetric Examples, TanStack Router, TanStack Query, TanStack Start, AWS CDK, AWS Lambda, DynamoDB, CloudFront, S3, Infrastructure as Code, IaC, TypeScript, React, Serverless, Full-Stack, CDK Constructs, ElectroDB, tRPC';
 
 // JSON-LD structured data for enhanced SEO and GEO
 const structuredData = {
@@ -33,7 +33,7 @@ const structuredData = {
   url: siteUrl,
   publisher: {
     '@type': 'Organization',
-    name: 'TanStack AWS Examples',
+    name: 'Moimetric Examples',
     url: siteUrl,
   },
   about: [
@@ -46,12 +46,12 @@ const structuredData = {
   ],
   mainEntity: {
     '@type': 'SoftwareSourceCode',
-    name: 'TanStack AWS Examples',
+    name: 'Moimetric Examples',
     description:
-      'TanStack AWS Examples - Examples of TanStack applications deployed to AWS using CDK infrastructure as code',
+      'Moimetric Examples - Examples of TanStack applications deployed to AWS using CDK infrastructure as code',
     programmingLanguage: ['TypeScript', 'JavaScript'],
     runtimePlatform: ['Node.js', 'AWS Lambda'],
-    codeRepository: 'https://github.com/JohannesKonings/tanstack-aws',
+    codeRepository: 'https://github.com/mdchad/moimetric',
   },
 };
 
@@ -79,7 +79,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
       {
         name: 'author',
-        content: 'TanStack AWS Examples',
+        content: 'Moimetric Examples',
       },
       {
         name: 'robots',
@@ -104,7 +104,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       },
       {
         property: 'og:site_name',
-        content: 'TanStack AWS Examples',
+        content: 'Moimetric Examples',
       },
       {
         property: 'og:image',
@@ -130,11 +130,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
       // Additional SEO tags for GEO (Generative Engine Optimization)
       {
         name: 'application-name',
-        content: 'TanStack AWS Examples',
+        content: 'Moimetric Examples',
       },
       {
         name: 'subject',
-        content: 'TanStack AWS Examples deployed with CDK infrastructure as code',
+        content: 'Moimetric Examples deployed with CDK infrastructure as code',
       },
       {
         name: 'classification',
@@ -165,7 +165,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         src: 'https://cloud.umami.is/script.js',
         defer: true,
         'data-website-id': '5fc7d7d9-ab60-4cd5-9edf-9908509e5705',
-        'data-domains': 'tanstack-aws-examples.com',
+        'data-domains': 'moimetric.com',
       },
     ],
   }),

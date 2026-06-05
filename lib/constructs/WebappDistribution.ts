@@ -47,7 +47,7 @@ export class WebappDistribution extends Construct {
 
     const { appStage, webappServerApi, assetsBucket, originBehaviorKind } = props;
 
-    const domainName = 'tanstack-aws-examples.com';
+    const domainName = 'moimetric.com';
     const isProd = appStage === 'prod';
     const hasCloudFrontFreePlane = appStage === 'prod' || appStage === 'main';
 

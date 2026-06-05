@@ -175,15 +175,15 @@ describe('WorkloadRegionAccountSetupStack', () => {
       Engine: 'aurora-postgresql',
     });
     template.hasResourceProperties('AWS::SSM::Parameter', {
-      Name: '/tanstack-aws/shared/aurora/cluster-arn',
+      Name: '/moimetric/shared/aurora/cluster-arn',
       Type: 'String',
     });
     template.hasResourceProperties('AWS::SSM::Parameter', {
-      Name: '/tanstack-aws/shared/aurora/secret-arn',
+      Name: '/moimetric/shared/aurora/secret-arn',
       Type: 'String',
     });
     template.hasResourceProperties('AWS::SSM::Parameter', {
-      Name: '/tanstack-aws/shared/aurora/database-name',
+      Name: '/moimetric/shared/aurora/database-name',
       Type: 'String',
       Value: 'tanstackaws',
     });

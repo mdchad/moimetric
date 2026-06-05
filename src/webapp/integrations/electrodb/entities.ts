@@ -13,7 +13,7 @@ import {
 // Table Configuration
 // =============================================================================
 
-const TABLE_NAME = process.env.DDB_PERSONS_TABLE_NAME ?? 'TanstackAwsStack-db-persons';
+const TABLE_NAME = process.env.DDB_PERSONS_TABLE_NAME ?? 'MoimetricStack-db-persons';
 
 const getEntityConfig = (): EntityConfiguration => ({
   client: getDdbDocClient(),

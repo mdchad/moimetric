@@ -6,7 +6,7 @@
 
 ### Overview
 
-TanStack AWS is a single TanStack Start (React SSR) application built with Vite + Nitro. It showcases TanStack libraries (Start, Router, DB, AI, Query, Store, Form, Table) with AWS services. There is no monorepo structure — one `package.json` at the root, pnpm as the package manager.
+Moimetric is a single TanStack Start (React SSR) application built with Vite + Nitro. It showcases TanStack libraries (Start, Router, DB, AI, Query, Store, Form, Table) with AWS services. There is no monorepo structure — one `package.json` at the root, pnpm as the package manager.
 
 ## Global conventions
 

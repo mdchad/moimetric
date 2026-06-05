@@ -17,7 +17,7 @@ export class WorkloadRegionAccountSetupStack extends cdk.Stack {
       throw new Error('Shared Aurora cluster secret was not created.');
     }
 
-    const parameterPrefix = '/tanstack-aws/shared/aurora';
+    const parameterPrefix = '/moimetric/shared/aurora';
 
     new ssm.StringParameter(this, 'SharedAuroraClusterArnParameter', {
       parameterName: `${parameterPrefix}/cluster-arn`,

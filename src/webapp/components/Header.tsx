@@ -45,7 +45,7 @@ export default function Header() {
           </h1>
         </div>
         <a
-          href="https://github.com/JohannesKonings/tanstack-aws"
+          href="https://github.com/mdchad/moimetric"
           target="_blank"
           rel="noopener noreferrer"
           className="p-2 hover:bg-gray-700 rounded-lg transition-colors"

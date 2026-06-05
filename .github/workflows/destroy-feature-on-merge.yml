@@ -61,7 +61,7 @@ jobs:
         env:
           APP_STAGE: ${{ steps.resolve-stage.outputs.stage }}
         run: |
-          STACK_NAME="TanstackAwsStack-${APP_STAGE}"
+          STACK_NAME="MoimetricStack-${APP_STAGE}"
           if [ -d ".output/server" ] && [ -d ".output/public" ]; then
             echo "Build artifacts found in .output/"
           else

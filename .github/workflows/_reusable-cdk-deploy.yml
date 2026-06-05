@@ -11,7 +11,7 @@ on:
         type: string
       stack_prefix:
         required: false
-        default: TanstackAwsStack
+        default: MoimetricStack
         type: string
       github_environment:
         required: false

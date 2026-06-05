@@ -6,7 +6,7 @@ this repository can rely on.
 ## Scope
 
 - GitHub Actions OIDC provider for AWS
-- A deploy role that only workflows from `JohannesKonings/tanstack-aws` can
+- A deploy role that only workflows from `mdchad/moimetric` can
   assume
 - Shared Aurora PostgreSQL Serverless v2 cluster (workload-region stack in
   `us-east-2`)
@@ -18,7 +18,7 @@ create a GitHub Actions workflow.
 ### Shared Aurora SSM Parameters
 
 The workload-region account setup stack publishes connection metadata for
-workload stacks under the prefix `/tanstack-aws/shared/aurora/`:
+workload stacks under the prefix `/moimetric/shared/aurora/`:
 
 | Parameter           | Description                         |
 | ------------------- | ----------------------------------- |
@@ -39,7 +39,7 @@ Required deployment order:
 1. Global account setup stack (`AccountSetupStack`, `us-east-1`)
 2. Workload region account setup stack (`WorkloadRegionAccountSetupStack`,
    `us-east-2`)
-3. Application stacks (`TanstackAwsStack-*`, automated through GitHub Actions)
+3. Application stacks (`MoimetricStack-*`, automated through GitHub Actions)
 
 ## Prerequisites
 

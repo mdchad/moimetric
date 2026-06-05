@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const appStage = process.env.APP_STAGE || 'dev';
-const productionDomain = 'https://tanstack-aws-examples.com';
+const productionDomain = 'https://moimetric.com';
 
 const getSitemapSection = (): string => {
   if (appStage === 'prod') {
@@ -27,7 +27,7 @@ Sitemap: ${productionDomain}/sitemap.xml
 };
 
 const robotsTxtContent = `# https://www.robotstxt.org/robotstxt.html
-# TanStack AWS Examples - Deployed with AWS CDK
+# Moimetric Examples - Deployed with AWS CDK
 
 User-agent: *
 Allow: /
