@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vite-plus/test';
 import { snapshotSafeTemplate } from '../../test/cdk-snapshot.ts';
 import { AccountSetupStack } from './account-setup-stack.ts';
 import { githubActionsOidcConfig, resolveAccountSetupEnv } from './app-config.ts';
-import { WorkloadRegionAccountSetupStack } from './workload-region-account-setup-stack.ts';
 
 describe('resolveAccountSetupEnv', () => {
   it('uses AWS account and region from environment variables', () => {
@@ -142,67 +141,6 @@ describe('AccountSetupStack', () => {
     expect(resourcesJson).not.toContain('AdministratorAccess');
     expect(templateJson.Outputs).toHaveProperty('GitHubActionsDeployRoleArn');
     expect(templateJson.Outputs).toHaveProperty('GitHubActionsOidcProviderArn');
-    expect(snapshotSafeTemplate(templateJson)).toMatchSnapshot();
-  });
-});
-
-describe('WorkloadRegionAccountSetupStack', () => {
-  it('creates shared Aurora PostgreSQL Serverless v2 infrastructure with Data API enabled', () => {
-    const app = new App();
-    const stack = new WorkloadRegionAccountSetupStack(app, 'WorkloadRegionAccountSetupStack', {
-      env: {
-        account: '123456789012',
-        region: 'us-east-2',
-      },
-    });
-
-    const template = Template.fromStack(stack);
-
-    template.resourceCountIs('AWS::EC2::VPC', 1);
-    template.hasResourceProperties('AWS::RDS::DBCluster', {
-      Engine: 'aurora-postgresql',
-      EnableHttpEndpoint: true,
-      DeletionProtection: true,
-      BackupRetentionPeriod: 7,
-      ServerlessV2ScalingConfiguration: {
-        MinCapacity: 0.5,
-        MaxCapacity: 4,
-      },
-      DatabaseName: 'tanstackaws',
-    });
-    template.hasResourceProperties('AWS::RDS::DBInstance', {
-      DBInstanceClass: 'db.serverless',
-      Engine: 'aurora-postgresql',
-    });
-    template.hasResourceProperties('AWS::SSM::Parameter', {
-      Name: '/moimetric/shared/aurora/cluster-arn',
-      Type: 'String',
-    });
-    template.hasResourceProperties('AWS::SSM::Parameter', {
-      Name: '/moimetric/shared/aurora/secret-arn',
-      Type: 'String',
-    });
-    template.hasResourceProperties('AWS::SSM::Parameter', {
-      Name: '/moimetric/shared/aurora/database-name',
-      Type: 'String',
-      Value: 'tanstackaws',
-    });
-
-    const clusterSgEntry = Object.entries(template.findResources('AWS::EC2::SecurityGroup')).find(
-      ([, r]) =>
-        (r as { Properties?: { GroupDescription?: string } }).Properties?.GroupDescription ===
-        'Aurora cluster - Data API only, no direct connections',
-    );
-    expect(clusterSgEntry).toBeDefined();
-    expect(
-      (clusterSgEntry![1] as { Properties?: { SecurityGroupIngress?: unknown } }).Properties
-        ?.SecurityGroupIngress,
-    ).toBeUndefined();
-
-    const templateJson = template.toJSON();
-    expect(templateJson.Outputs).toHaveProperty('SharedAuroraClusterArn');
-    expect(templateJson.Outputs).toHaveProperty('SharedAuroraSecretArn');
-    expect(templateJson.Outputs).toHaveProperty('SharedAuroraDatabaseName');
     expect(snapshotSafeTemplate(templateJson)).toMatchSnapshot();
   });
 });
