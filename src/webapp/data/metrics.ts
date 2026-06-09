@@ -1,5 +1,5 @@
 import { createServerFn } from '@tanstack/react-start';
-import { and, asc, eq, gte, lt } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lt } from 'drizzle-orm';
 import { z } from 'zod';
 import { CANONICAL_METRICS } from '#src/webapp/integrations/providers/core/catalog.ts';
 import {
@@ -96,6 +96,67 @@ export const getMetricSeries = createServerFn({ method: 'POST' })
       label: meta.label,
       points: downsample(rows, meta.kind, data.maxPoints),
     };
+  });
+
+const ConnectionSeriesQuery = z.object({
+  connectionId: z.string().min(1),
+  metricKeys: z.array(CanonicalMetricKey).min(1),
+  granularity: Granularity.default('day'),
+  start: z.number().int(),
+  end: z.number().int(),
+  maxPoints: z.number().int().positive().default(DEFAULT_MAX_POINTS),
+});
+
+export interface MetricSeries {
+  metricKey: CanonicalMetricKey;
+  label: string;
+  unit: MetricUnit;
+  points: SeriesPoint[];
+}
+
+// Multiple metrics for one connection in a single query — powers a consolidated
+// per-domain chart (e.g. clicks + impressions on dual axes).
+export const getConnectionSeries = createServerFn({ method: 'POST' })
+  .inputValidator((data: unknown) => ConnectionSeriesQuery.parse(data))
+  .handler(async ({ data }): Promise<{ series: MetricSeries[] }> => {
+    const db = await getDb();
+    const rows = await db
+      .select({
+        metricKey: metricPoints.metricKey,
+        bucketTs: metricPoints.bucketTs,
+        value: metricPoints.value,
+      })
+      .from(metricPoints)
+      .where(
+        and(
+          eq(metricPoints.connectionId, data.connectionId),
+          eq(metricPoints.granularity, data.granularity),
+          eq(metricPoints.dimsHash, ''),
+          inArray(metricPoints.metricKey, data.metricKeys),
+          gte(metricPoints.bucketTs, data.start),
+          lt(metricPoints.bucketTs, data.end),
+        ),
+      )
+      .orderBy(asc(metricPoints.bucketTs));
+
+    const byMetric = new Map<string, SeriesPoint[]>();
+    for (const row of rows) {
+      const list = byMetric.get(row.metricKey) ?? [];
+      list.push({ bucketTs: row.bucketTs, value: row.value });
+      byMetric.set(row.metricKey, list);
+    }
+
+    const series = data.metricKeys.map((metricKey): MetricSeries => {
+      const meta = CANONICAL_METRICS[metricKey];
+      return {
+        metricKey,
+        label: meta.label,
+        unit: meta.unit,
+        points: downsample(byMetric.get(metricKey) ?? [], meta.kind, data.maxPoints),
+      };
+    });
+
+    return { series };
   });
 
 const DashboardChartsQuery = z.object({ dashboardId: z.string().min(1) });
