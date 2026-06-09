@@ -80,8 +80,12 @@ function DashboardPage() {
     <div className="mx-auto max-w-6xl p-6">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Dashboard</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Demo App · last {windowDays} days</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Dashboard
+          </h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Demo App · last {windowDays} days
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700">
