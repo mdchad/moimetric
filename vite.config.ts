@@ -63,7 +63,6 @@ const config = defineConfig({
       '.tanstack/**',
       'cdk.out/**',
       'drizzle/**',
-      'docs/PLAN-DB-PERSONS.md',
       'src/webapp/routeTree.gen.ts',
     ],
     singleQuote: true,

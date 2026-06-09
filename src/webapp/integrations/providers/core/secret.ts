@@ -37,3 +37,21 @@ export const loadConnectionSecret = async <TSchema extends z.ZodTypeAny>(
   }
   return parsed.data;
 };
+
+// Raw secret JSON loader for the ingestion worker, which doesn't know a provider's
+// secret schema at compile time — the adapter validates it internally.
+export const loadConnectionSecretRaw = async (secretArn: string): Promise<unknown> => {
+  let secretString: string | undefined;
+  try {
+    const response = await getSecretsManager().send(
+      new GetSecretValueCommand({ SecretId: secretArn }),
+    );
+    secretString = response.SecretString;
+  } catch (error) {
+    throw transientError(`Failed to read connection secret ${secretArn}`, error);
+  }
+  if (!secretString) {
+    throw authError(`Connection secret ${secretArn} has no value`);
+  }
+  return JSON.parse(secretString);
+};

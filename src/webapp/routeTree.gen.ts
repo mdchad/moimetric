@@ -28,6 +28,8 @@ import { Route as DemoStartSsrIndexRouteImport } from './routes/demo/start.ssr.i
 import { Route as DemoStartSsrSpaModeRouteImport } from './routes/demo/start.ssr.spa-mode'
 import { Route as DemoStartSsrFullSsrRouteImport } from './routes/demo/start.ssr.full-ssr'
 import { Route as DemoStartSsrDataOnlyRouteImport } from './routes/demo/start.ssr.data-only'
+import { Route as ApiConnectGoogleStartRouteImport } from './routes/api.connect.google.start'
+import { Route as ApiConnectGoogleCallbackRouteImport } from './routes/api.connect.google.callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -124,6 +126,17 @@ const DemoStartSsrDataOnlyRoute = DemoStartSsrDataOnlyRouteImport.update({
   path: '/demo/start/ssr/data-only',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiConnectGoogleStartRoute = ApiConnectGoogleStartRouteImport.update({
+  id: '/api/connect/google/start',
+  path: '/api/connect/google/start',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiConnectGoogleCallbackRoute =
+  ApiConnectGoogleCallbackRouteImport.update({
+    id: '/api/connect/google/callback',
+    path: '/api/connect/google/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -141,6 +154,8 @@ export interface FileRoutesByFullPath {
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
   '/example/guitars/$guitarId': typeof ExampleGuitarsGuitarIdRoute
   '/example/guitars/': typeof ExampleGuitarsIndexRoute
+  '/api/connect/google/callback': typeof ApiConnectGoogleCallbackRoute
+  '/api/connect/google/start': typeof ApiConnectGoogleStartRoute
   '/demo/start/ssr/data-only': typeof DemoStartSsrDataOnlyRoute
   '/demo/start/ssr/full-ssr': typeof DemoStartSsrFullSsrRoute
   '/demo/start/ssr/spa-mode': typeof DemoStartSsrSpaModeRoute
@@ -162,6 +177,8 @@ export interface FileRoutesByTo {
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
   '/example/guitars/$guitarId': typeof ExampleGuitarsGuitarIdRoute
   '/example/guitars': typeof ExampleGuitarsIndexRoute
+  '/api/connect/google/callback': typeof ApiConnectGoogleCallbackRoute
+  '/api/connect/google/start': typeof ApiConnectGoogleStartRoute
   '/demo/start/ssr/data-only': typeof DemoStartSsrDataOnlyRoute
   '/demo/start/ssr/full-ssr': typeof DemoStartSsrFullSsrRoute
   '/demo/start/ssr/spa-mode': typeof DemoStartSsrSpaModeRoute
@@ -184,6 +201,8 @@ export interface FileRoutesById {
   '/demo/start/server-funcs': typeof DemoStartServerFuncsRoute
   '/example/guitars/$guitarId': typeof ExampleGuitarsGuitarIdRoute
   '/example/guitars/': typeof ExampleGuitarsIndexRoute
+  '/api/connect/google/callback': typeof ApiConnectGoogleCallbackRoute
+  '/api/connect/google/start': typeof ApiConnectGoogleStartRoute
   '/demo/start/ssr/data-only': typeof DemoStartSsrDataOnlyRoute
   '/demo/start/ssr/full-ssr': typeof DemoStartSsrFullSsrRoute
   '/demo/start/ssr/spa-mode': typeof DemoStartSsrSpaModeRoute
@@ -207,6 +226,8 @@ export interface FileRouteTypes {
     | '/demo/start/server-funcs'
     | '/example/guitars/$guitarId'
     | '/example/guitars/'
+    | '/api/connect/google/callback'
+    | '/api/connect/google/start'
     | '/demo/start/ssr/data-only'
     | '/demo/start/ssr/full-ssr'
     | '/demo/start/ssr/spa-mode'
@@ -228,6 +249,8 @@ export interface FileRouteTypes {
     | '/demo/start/server-funcs'
     | '/example/guitars/$guitarId'
     | '/example/guitars'
+    | '/api/connect/google/callback'
+    | '/api/connect/google/start'
     | '/demo/start/ssr/data-only'
     | '/demo/start/ssr/full-ssr'
     | '/demo/start/ssr/spa-mode'
@@ -249,6 +272,8 @@ export interface FileRouteTypes {
     | '/demo/start/server-funcs'
     | '/example/guitars/$guitarId'
     | '/example/guitars/'
+    | '/api/connect/google/callback'
+    | '/api/connect/google/start'
     | '/demo/start/ssr/data-only'
     | '/demo/start/ssr/full-ssr'
     | '/demo/start/ssr/spa-mode'
@@ -271,6 +296,8 @@ export interface RootRouteChildren {
   DemoStartServerFuncsRoute: typeof DemoStartServerFuncsRoute
   ExampleGuitarsGuitarIdRoute: typeof ExampleGuitarsGuitarIdRoute
   ExampleGuitarsIndexRoute: typeof ExampleGuitarsIndexRoute
+  ApiConnectGoogleCallbackRoute: typeof ApiConnectGoogleCallbackRoute
+  ApiConnectGoogleStartRoute: typeof ApiConnectGoogleStartRoute
   DemoStartSsrDataOnlyRoute: typeof DemoStartSsrDataOnlyRoute
   DemoStartSsrFullSsrRoute: typeof DemoStartSsrFullSsrRoute
   DemoStartSsrSpaModeRoute: typeof DemoStartSsrSpaModeRoute
@@ -412,6 +439,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DemoStartSsrDataOnlyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/connect/google/start': {
+      id: '/api/connect/google/start'
+      path: '/api/connect/google/start'
+      fullPath: '/api/connect/google/start'
+      preLoaderRoute: typeof ApiConnectGoogleStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/connect/google/callback': {
+      id: '/api/connect/google/callback'
+      path: '/api/connect/google/callback'
+      fullPath: '/api/connect/google/callback'
+      preLoaderRoute: typeof ApiConnectGoogleCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -431,6 +472,8 @@ const rootRouteChildren: RootRouteChildren = {
   DemoStartServerFuncsRoute: DemoStartServerFuncsRoute,
   ExampleGuitarsGuitarIdRoute: ExampleGuitarsGuitarIdRoute,
   ExampleGuitarsIndexRoute: ExampleGuitarsIndexRoute,
+  ApiConnectGoogleCallbackRoute: ApiConnectGoogleCallbackRoute,
+  ApiConnectGoogleStartRoute: ApiConnectGoogleStartRoute,
   DemoStartSsrDataOnlyRoute: DemoStartSsrDataOnlyRoute,
   DemoStartSsrFullSsrRoute: DemoStartSsrFullSsrRoute,
   DemoStartSsrSpaModeRoute: DemoStartSsrSpaModeRoute,
