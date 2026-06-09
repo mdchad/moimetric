@@ -16,6 +16,7 @@ const config = defineConfig({
       '.nitro/**',
       '.tanstack/**',
       'cdk.out/**',
+      'drizzle/**',
       'src/webapp/routeTree.gen.ts',
     ],
     categories: {
@@ -61,6 +62,7 @@ const config = defineConfig({
       '.nitro/**',
       '.tanstack/**',
       'cdk.out/**',
+      'drizzle/**',
       'docs/PLAN-DB-PERSONS.md',
       'src/webapp/routeTree.gen.ts',
     ],
@@ -73,7 +75,7 @@ const config = defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['lib/**/*.test.ts', 'accountSetup/lib/**/*.test.ts'],
+    include: ['lib/**/*.test.ts', 'accountSetup/lib/**/*.test.ts', 'src/webapp/**/*.test.ts'],
     exclude: [
       '**/node_modules/**',
       '**/.git/**',
@@ -87,6 +89,9 @@ const config = defineConfig({
   staged: { '*': 'vp check --fix' },
   resolve: {
     tsconfigPaths: true,
+    // recharts -> d3-shape imports `Path` from d3-path, which only exists in
+    // d3-path@3. Force a single (3.x) copy so a stale nested d3-path@1 can't shadow it.
+    dedupe: ['d3-path'],
   },
   plugins: isVitest
     ? []

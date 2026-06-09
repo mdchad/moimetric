@@ -9,9 +9,6 @@ import { TIMEOUT_IN_SECONDS } from './type.ts';
 
 type WebappServerProps = {
   appStage: string;
-  tableNameTodos: string;
-  tableNamePersons: string;
-  tableNameEvents: string;
 };
 export class WebappServer extends Construct {
   readonly webappServer: Function;
@@ -19,7 +16,7 @@ export class WebappServer extends Construct {
   constructor(scope: Construct, id: string, props: WebappServerProps) {
     super(scope, id);
 
-    const { appStage, tableNameTodos, tableNamePersons, tableNameEvents } = props;
+    const { appStage } = props;
 
     // Turso (libSQL) credentials live in a per-stage Secrets Manager secret
     // created out-of-band (see README): moimetric/<stage>/turso => { url, authToken }.
@@ -39,9 +36,6 @@ export class WebappServer extends Construct {
       // timeout: Duration.seconds(60),
       environment: {
         TURSO_SECRET_ARN: tursoSecret.secretArn,
-        DDB_TODOS_TABLE_NAME: tableNameTodos,
-        DDB_PERSONS_TABLE_NAME: tableNamePersons,
-        EVENTS_TABLE: tableNameEvents,
       },
       tracing: Tracing.ACTIVE,
     });
@@ -71,7 +65,7 @@ export class WebappServer extends Construct {
         {
           id: 'AwsSolutions-IAM5',
           reason:
-            'Bedrock InvokeModel requires *; model ARNs are dynamic. CloudWatch ListMetrics/GetMetricStatistics require * per AWS API design. DynamoDB GSI uses table/index ARN patterns.',
+            'Bedrock InvokeModel requires *; model ARNs are dynamic. CloudWatch ListMetrics/GetMetricStatistics require * per AWS API design.',
         },
         {
           id: 'AwsSolutions-IAM4',
