@@ -595,6 +595,29 @@ differentiation on top.** The build order follows that, not the architecture dia
    metric store.
 5. **MCP billing:** GSC-Wizard makes MCP free on every plan as acquisition. Confirm same posture
    (free read scope, paid write/volume?) — affects rate-limit defaults.
+6. **v2 mobile (Expo) API surface — decided in principle, build later.** The v2 Expo app must NOT
+   call TanStack `createServerFn` endpoints: they are framework-internal RPC (generated URLs,
+   internal payload encoding), not a public contract. The public surface is TanStack Start
+   **server routes** (Next.js-style file-based HTTP handlers — already in use:
+   `api.auth.$.ts`, `api.connect.google.callback.ts`), in one of two flavors to decide at v2 time:
+   (a) hand-written **REST server routes** (`api.v1.*` — plain fetch from Expo, also
+   third-party-consumable), or (b) a **tRPC router** mounted on the existing `api.trpc.$` server
+   route (deps installed; typed `@trpc/client` from React Native; shared Zod schemas; no
+   per-endpoint serialization to maintain). Either way it's the same domain functions behind a
+   different door. Auth via the **better-auth Expo plugin** against the existing `api.auth.$`
+   endpoints (+ native Google sign-in flow). Push is already Expo-first (§6.7).
+   **Decided: the webapp KEEPS server functions; the API route is for Expo (and later third
+   parties) — transports are not shared, the domain layer is.** Server fns are the SSR fast path
+   (direct in-Lambda function call, no HTTP hop); routing web reads through the public API would
+   self-call Lambda → CloudFront → API GW → same Lambda on every SSR render for zero user benefit.
+   Drift between the two transports is prevented by the thin-handler rule, not by transport
+   unification. Target shape: **one domain core, many thin doors** — server fns (web/SSR),
+   tRPC/REST route (Expo), MCP route (agents), Lambda handlers (pipeline) — all calling the same
+   plain functions (`syncConnection()` already proves the pattern with three callers).
+   **Discipline to enforce NOW so v2 is a transport, not a rewrite: server-fn handlers contain no
+   logic — parse → `requireUserWorkspace()` → call a plain domain function.** Known offender:
+   `data/metrics.ts` keeps query + downsampling logic inside its handler; extract before the
+   mobile work starts. (Functional core / imperative shell, applied to the read path.)
 
 ---
 

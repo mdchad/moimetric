@@ -75,7 +75,10 @@ export const createPosthogAdapter = (deps: AdapterDeps = {}): MetricSourceAdapte
       filters.push(`event = '$pageview'`);
     }
     if (config.hostFilter) {
-      filters.push(`properties.$host = '${config.hostFilter}'`);
+      // $host is the literal browser host, so 'myway.my' and 'www.myway.my' are
+      // different values. Normalize to the bare domain and match both variants.
+      const bare = config.hostFilter.replace(/^www\./i, '');
+      filters.push(`properties.$host IN ('${bare}', 'www.${bare}')`);
     }
     const query = [
       `SELECT toStartOfDay(timestamp) AS bucket, ${mapping.select} AS value`,
