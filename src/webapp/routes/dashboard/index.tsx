@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
+import { ConnectPosthogForm } from '#src/webapp/components/metrics/ConnectPosthogForm.tsx';
 import { MetricChart } from '#src/webapp/components/metrics/MetricChart.tsx';
 import { getSessionUser } from '#src/webapp/data/auth.ts';
 import { getConnectionSeries, getDashboardCharts } from '#src/webapp/data/metrics.ts';
@@ -53,6 +54,7 @@ function ChartCard({ group, windowDays }: { group: ChartGroup; windowDays: numbe
 function DashboardPage() {
   const queryClient = useQueryClient();
   const [windowDays, setWindowDays] = useState<number>(DEFAULT_WINDOW_DAYS);
+  const [showPosthogForm, setShowPosthogForm] = useState(false);
 
   const { data: dashboardCharts } = useQuery({
     queryKey: ['dashboard-charts'],
@@ -118,6 +120,13 @@ function DashboardPage() {
           </a>
           <button
             type="button"
+            onClick={() => setShowPosthogForm((open) => !open)}
+            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+          >
+            Connect PostHog
+          </button>
+          <button
+            type="button"
             onClick={() => sync.mutate()}
             disabled={sync.isPending}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
@@ -129,6 +138,16 @@ function DashboardPage() {
 
       {sync.isError ? (
         <p className="mb-4 text-sm text-red-600">Sync failed: {String(sync.error)}</p>
+      ) : null}
+
+      {showPosthogForm ? (
+        <ConnectPosthogForm
+          onConnected={() => {
+            setShowPosthogForm(false);
+            queryClient.invalidateQueries({ queryKey: ['dashboard-charts'] });
+            queryClient.invalidateQueries({ queryKey: ['connection-series'] });
+          }}
+        />
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2">

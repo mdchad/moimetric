@@ -1,6 +1,6 @@
 # Moimetric — System Design & Architecture
 
-Status: **Draft v1.1** (v1 + foundation audit, §14) · Owner: @mdchad · Last updated: 2026-06-10
+Status: **Draft v1.2** (v1.1 + storage revision: ephemeral state in Turso, DynamoDB deferred) · Owner: @mdchad · Last updated: 2026-06-10
 
 > This spec maps the target architecture for Moimetric: a **notification-first, cross-source
 > metrics watchdog** for solo devs and small SaaS teams. It builds on the existing adapter
@@ -93,13 +93,13 @@ We do not rewrite ingestion — we put a scheduler and a queue in front of it.
                                        │  domain) │                       │ fatigue      │
                                        └──────────┘                       └──────┬───────┘
                                             ▲                                    │ NotificationRequested
-   ┌─────────────────────────┐             │                                    ▼
-   │  DynamoDB (ephemeral)    │             │                             ┌──────────────┐
-   │  rate limits, dedupe     │             │                             │  Notify λ    │
-   │  windows, idempotency    │             │                             │ Notifier port│
-   │  (TTL'd)                 │             │                             │ → Expo/SES/  │
-   └─────────────────────────┘             │                             │   SNS        │
-                                            │                             └──────┬───────┘
+   (ephemeral state — rate-limit            │                                    ▼
+    buckets, alert dedupe windows —          │                             ┌──────────────┐
+    lives in TTL'd Turso tables,             │                             │  Notify λ    │
+    swept on the hourly tick; see §5)        │                             │ Notifier port│
+                                             │                             │ → Expo/SES/  │
+                                             │                             │   SNS        │
+                                             │                             └──────┬───────┘
   ┌───────────────────────────────────────┼──────────────────┐                 │
   │             WEB LAMBDA (existing Nitro, API GW + CloudFront)               push/email
   │  • SSR dashboard + server functions (charts read metric_points)           │
@@ -117,8 +117,11 @@ can never take down SSR.
 
 ## 5. Storage strategy (decision)
 
-**Decision: keep Turso as the system of record for v1. Add one DynamoDB table for hot ephemeral
-state. Defer Amazon Timestream until cardinality forces it.**
+**Decision: keep Turso as the system of record AND the home for ephemeral state in v1 — one data
+layer. Defer both DynamoDB and Amazon Timestream behind measured triggers.**
+
+(Revised 2026-06-10: v1 of this doc proposed a DynamoDB table for ephemeral state. That was
+reflexive AWS-reaching and failed the doc's own YAGNI test — see the deferral entry below.)
 
 Rationale:
 
@@ -127,11 +130,23 @@ Rationale:
   clustering. Ripping it out now is scope creep with no user-visible payoff. Relational joins
   (connection → product → org, chart discovery, alert history) are exactly what SQLite is good at.
   Keep it.
-- **DynamoDB (ephemeral, high-write, TTL'd).** Three needs don't belong in a relational store
-  because they're hot, write-heavy, and disposable: **MCP rate-limit counters**, **alert dedupe
-  windows**, and **idempotency receipts** for queue consumers. A single-table DynamoDB design with
-  per-item TTL is the AWS-native fit (atomic `ADD`, automatic expiry, no vacuum). This also gives
-  us a clean home for anything that must survive a Lambda but not the week.
+- **Turso (ephemeral state too).** Rate-limit buckets and alert dedupe windows are small TTL'd
+  tables (`expires_at` column) swept on the hourly tick we already run. At this product's scale
+  this needs nothing more: libSQL serializes writes through a single primary, so
+  `UPDATE … SET count = count + 1` is atomic — there is no lost-update race for DynamoDB's atomic
+  `ADD` to solve. One datastore = one CDK surface, one IAM story, one local-dev story.
+- **Idempotency needs no receipts at all.** The shipped ingestion pipeline proves it: SQS FIFO
+  `MessageDeduplicationId` dedupes enqueues, and the `metric_points` composite-PK upsert makes
+  re-processing harmless. Duplicate `IngestionCompleted` events (possible — FIFO dedup is a 5-min
+  window; a redelivery after visibility timeout can double-emit) are **tolerated, not prevented**:
+  detection/alerting are idempotent by dedupe key (§6.6), so a duplicate event re-derives the same
+  anomaly/alert and collapses. Consumer idempotency beats receipt bookkeeping.
+- **DynamoDB (deferred).** Held to the same standard as Timestream. **Trigger to revisit:**
+  observed write contention on ephemeral-state tables (rate-limit/dedupe writes visibly delaying
+  ingestion upserts on the shared primary), or MCP rate-limit checks adding measurable p95 latency
+  to tool calls (> ~20 ms), or sustained ephemeral-state writes > ~50/s. The likely first mover is
+  the MCP rate-limit bucket (a synchronous hot-path write per tool call) — if the trigger fires,
+  migrate that one workload, not all ephemeral state. Until then, YAGNI.
 - **Amazon Timestream for LiveAnalytics (deferred).** If/when `metric_points` cardinality explodes
   (many products × many sources × dimensional breakdowns × daily history), a purpose-built
   time-series store with built-in interpolation and windowed aggregation becomes attractive for the
@@ -199,8 +214,10 @@ queue** (maxReceiveCount 3).
 - On success, emit a single **`IngestionCompleted`** domain event to the EventBridge bus
   (`{ productId, connectionId, metricKey, affectedWindow, watermark }`). This is the only coupling
   to detection — fully decoupled, fan-out-friendly.
-- Idempotency: ingestion upserts are already idempotent; the event emit is deduped via a DynamoDB
-  receipt keyed by `(connectionId, metricKey, runId)` so a re-delivered SQS message doesn't double-fire detection.
+- Idempotency: ingestion upserts are already idempotent, and the event emit needs **no dedup
+  bookkeeping** — a re-delivered SQS message may double-emit `IngestionCompleted`, and that is
+  fine, because detection/alerting are idempotent by dedupe key (§5, §6.6): the duplicate
+  re-derives the same anomaly and collapses. Consumer idempotency, not receipts.
 
 **Why SQS + Scheduler over per-connection EventBridge schedules or Step Functions:** per-connection
 schedules don't scale to thousands of connections and are painful to manage; Step Functions is
@@ -313,10 +330,11 @@ Detection finds breaks; alerting decides what is worth a human's attention and a
 - **Severity tiers:** `critical` (wake-me: revenue cliff, error spike post-deploy) →
   `warning` (digest: gradual GSC decline) → `info`. Derived from magnitude × confidence ×
   metric `defaultSeverity` × whether a correlation/annotation raises it.
-- **Dedupe / fatigue control:** a DynamoDB dedupe window keyed by
+- **Dedupe / fatigue control:** a TTL'd dedupe window in Turso keyed by
   `(productId, connectionId, metricKey, severity)` collapses repeated detections of the same
-  ongoing break into one alert with an updated "still ongoing" state — not a daily re-ping. **This
-  is the single most important churn-prevention mechanism in the system.**
+  ongoing break into one alert with an updated "still ongoing" state — not a daily re-ping. This
+  same key is what makes consumers idempotent under duplicate `IngestionCompleted` events (§5).
+  **This is the single most important churn-prevention mechanism in the system.**
 - **Feedback loop:** every alert carries an id; `alert_feedback` records `useful | not_useful |
 mute_this_kind`. Feedback feeds back into per-product/per-metric thresholds over time. Build this
   in from day one — without it the system can't learn each user's baseline and will over- or
@@ -359,9 +377,11 @@ remote, key-authenticated, scoped, rate-limited.
 - **Scopes:** `read` (query series, list anomalies, run reports) vs `write` (mutations — trigger a
   re-sync, acknowledge/mute an alert, add an annotation). Split write into capability scopes later
   (`alerts:write`, `annotations:write`) rather than one coarse toggle. **Mutations are audit-logged.**
-- **Rate limiting:** per-**account** token bucket in DynamoDB (atomic `ADD` + TTL), e.g. 60/min,
-  1000/hr shared across an account's keys; respond `429 + Retry-After`. Protocol handshakes
-  excluded.
+- **Rate limiting:** per-**account** token bucket in a TTL'd Turso table (single-statement
+  `UPDATE … count = count + 1` is atomic on libSQL's single write primary), e.g. 60/min, 1000/hr
+  shared across an account's keys; respond `429 + Retry-After`. Protocol handshakes excluded.
+  This is the workload most likely to trip the §5 DynamoDB trigger (a synchronous write per tool
+  call) — if it does, migrate this bucket alone.
 - **Tools — designed for a _cold_ autonomous agent** (it arrives without UI context and must
   rediscover the problem):
   - `list_anomalies(productId?, since?, severity?)` — what's currently broken.
@@ -409,14 +429,17 @@ All new resources are CDK constructs under `lib/constructs/`, composed by `Webap
 to the existing cdk-nag aspects (expect suppressions + a `*.synth.test.ts` snapshot update — per
 `CLAUDE.md`).
 
-| Construct              | AWS resources                                                                                                                   | Notes                                                                                                       |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `IngestionPipeline`    | EventBridge **Scheduler** (rate 5 min) → Planner Lambda; **SQS** ingest-queue + **DLQ**; Ingest Worker Lambda (SQS source)      | Worker gets the same Secrets Manager grants the web Lambda has (`moimetric/<stage>/connections/*`)          |
-| `DomainEventBus`       | EventBridge custom bus `moimetric.metrics` + rules → Detection/Alerting/Notify Lambdas, each with a DLQ                         | Versioned, Zod-validated events                                                                             |
-| `DetectionWorkers`     | Detection Lambda, Alerting Lambda, Notify Lambda                                                                                | Detection/alerting need Turso secret; Notify needs Expo creds (secret) + **SES** + optional **SNS** publish |
-| `EphemeralStateTable`  | **DynamoDB** single-table, on-demand, **TTL** enabled                                                                           | rate limits, dedupe windows, idempotency receipts                                                           |
-| `NotificationChannels` | **SES** identity (+ DKIM), optional **SNS** platform application / **Pinpoint**                                                 | Email + mobile push                                                                                         |
-| (web Lambda, extended) | new IAM: DynamoDB R/W on the ephemeral table; `events:PutEvents` on the bus (for MCP `trigger_sync`/`add_annotation`); SES send | MCP + annotation routes live here                                                                           |
+| Construct              | AWS resources                                                                                                              | Notes                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `IngestionPipeline`    | EventBridge **Scheduler** (rate 5 min) → Planner Lambda; **SQS** ingest-queue + **DLQ**; Ingest Worker Lambda (SQS source) | Worker gets the same Secrets Manager grants the web Lambda has (`moimetric/<stage>/connections/*`)          |
+| `DomainEventBus`       | EventBridge custom bus `moimetric.metrics` + rules → Detection/Alerting/Notify Lambdas, each with a DLQ                    | Versioned, Zod-validated events                                                                             |
+| `DetectionWorkers`     | Detection Lambda, Alerting Lambda, Notify Lambda                                                                           | Detection/alerting need Turso secret; Notify needs Expo creds (secret) + **SES** + optional **SNS** publish |
+| `NotificationChannels` | **SES** identity (+ DKIM), optional **SNS** platform application / **Pinpoint**                                            | Email + mobile push                                                                                         |
+| (web Lambda, extended) | new IAM: `events:PutEvents` on the bus (for MCP `trigger_sync`/`add_annotation`); SES send                                 | MCP + annotation routes live here                                                                           |
+
+(Removed from this list 2026-06-10: an `EphemeralStateTable` DynamoDB construct. Ephemeral state
+lives in TTL'd Turso tables — see §5 for the rationale and the measured trigger that would bring
+DynamoDB back.)
 
 Additionally, a `PipelineObservability` construct ships **with Phase 0, not after**: CloudWatch
 alarms on every DLQ depth (> 0), per-Lambda error rate + throttles, EventBridge failed-invocation
@@ -446,7 +469,7 @@ Turso credentials). Simple, observable in CI, no custom-resource magic.
 (default 30 s) — otherwise long MCP tool calls and streamed responses get cut mid-stream (§14, G9).
 
 **Stage lifecycle** (per `.cursor/rules/cdk-stage-lifecycle.mdc`): all new stateful resources
-(SQS, DynamoDB, event bus) follow the ephemeral-vs-permanent removal-policy rules; ephemeral stages
+(SQS, event bus) follow the ephemeral-vs-permanent removal-policy rules; ephemeral stages
 auto-delete, permanent (`main`/`prod`) retain. No slug logic duplicated — everything flows through
 `lib/stage-name.ts`. Note: cleanup is applied **at app scope** (`bin/app.ts` `RemovalPolicies`), so
 new constructs inherit it implicitly — any per-resource retention exception must be explicit and
@@ -454,8 +477,8 @@ commented in the construct.
 
 **Why these services:** Scheduler (managed cron, no always-on poller), SQS (buffering + retries +
 DLQ for vendor flakiness), EventBridge bus (decoupled fan-out, add-a-consumer extensibility),
-DynamoDB (atomic TTL'd counters), SES/SNS (managed delivery). Each maps to a specific need above —
-no service for its own sake.
+SES/SNS (managed delivery). Each maps to a specific need above — no service for its own sake; the
+same test is why DynamoDB is _not_ on this list (§5).
 
 ---
 
@@ -477,10 +500,12 @@ notification_targets   (userId, channel, address/token, severityFloor,      -- d
 mcp_api_keys           (id, orgId/productId, name, scope, keyHash,           -- MCP auth
                         lastUsedAt, createdAt, revokedAt)
 mcp_audit_log          (id, keyId, tool, argsHash, ts, outcome)             -- write-scope audit
+rate_limit_buckets     (key, windowStart, count, expiresAt)                 -- MCP token buckets
+alert_dedupe_windows   (dedupeKey, state, firstSeenAt, expiresAt)           -- fatigue control
 ```
 
-Ephemeral state (DynamoDB, TTL'd, **not** Turso): rate-limit buckets, alert dedupe windows,
-ingestion idempotency receipts.
+Ephemeral rows (`rate_limit_buckets`, `alert_dedupe_windows`) carry an `expiresAt` and are swept by
+the existing hourly tick — same database, no second store (§5).
 
 ---
 
@@ -504,7 +529,7 @@ src/webapp/
   mcp/
     server.ts                    # transport + dispatch
     tools/                       # one file per tool, Zod-validated
-    auth.ts rate-limit.ts        # key resolution + DynamoDB token bucket
+    auth.ts rate-limit.ts        # key resolution + Turso token bucket (TTL'd, §5)
   data/                          # EXISTS — server functions (read path)
 src/lambda/
   ingest-planner.ts ingest-worker.ts   # ingestion engine
@@ -594,16 +619,16 @@ phase that owns it.
 
 ### P1 — fix within the owning phase
 
-| #   | Gap                                                                                                                                                                                                                                      | Where                                                     | Owner   |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------- |
-| G7  | **Zero alarms:** no DLQ-depth, Lambda-error, or EventBridge-failure alarms anywhere. `PipelineObservability` construct ships with Phase 0 (§8).                                                                                          | `lib/constructs/`                                         | Phase 0 |
-| G8  | **Migrations never run on deploy** — `drizzle/` exists, deploy workflows don't invoke `db:migrate`; first new table = runtime "no such table" in prod. §8 adds the CI step.                                                              | `.github/workflows/_reusable-cdk-deploy.yml`              | Phase 0 |
-| G9  | **CloudFront origin read timeout is default 30 s** while Lambda/API GW allow 120 s — long MCP calls and streams get cut mid-response. Raise explicitly (§8).                                                                             | `lib/constructs/WebappDistribution.ts`                    | Phase 4 |
-| G10 | **Secrets fetched per call, uncached** — a 100-message worker burst = 100 `GetSecretValue` calls (50 TPS default quota). Add an in-memory TTL cache keyed by ARN (warm-Lambda reuse).                                                    | `providers/core/secret.ts`                                | Phase 0 |
-| G11 | **In-memory `RateLimiter` is per-instance** — fine once FIFO serializes per-connection work (G3), but document the assumption; cross-connection same-provider limits (one vendor account, N connections) would need the DynamoDB bucket. | `providers/core/rate-limit.ts`                            | Phase 0 |
-| G12 | **Orphaned Secrets Manager secrets** if the OAuth callback fails between `upsertGrantSecret` and connection insert. Weekly cleanup sweep (secrets with no matching connection row).                                                      | `routes/api.connect.google.callback.ts`, `gsc-connect.ts` | Phase 2 |
-| G13 | **`providerConfig` parsed raw** (`JSON.parse`, no schema) in the sync path — one corrupt row breaks the product's sync loop. Validate via the adapter's config schema at load.                                                           | `data/sync.ts:49`                                         | Phase 0 |
-| G14 | **Audit-trail fields dead:** `sync_runs.cursorBefore` never written (can't diagnose cursor regressions). Populate alongside G3/G4.                                                                                                       | `data/ingest.ts`                                          | Phase 0 |
+| #   | Gap                                                                                                                                                                                                                                                             | Where                                                     | Owner   |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------- |
+| G7  | **Zero alarms:** no DLQ-depth, Lambda-error, or EventBridge-failure alarms anywhere. `PipelineObservability` construct ships with Phase 0 (§8).                                                                                                                 | `lib/constructs/`                                         | Phase 0 |
+| G8  | **Migrations never run on deploy** — `drizzle/` exists, deploy workflows don't invoke `db:migrate`; first new table = runtime "no such table" in prod. §8 adds the CI step.                                                                                     | `.github/workflows/_reusable-cdk-deploy.yml`              | Phase 0 |
+| G9  | **CloudFront origin read timeout is default 30 s** while Lambda/API GW allow 120 s — long MCP calls and streams get cut mid-response. Raise explicitly (§8).                                                                                                    | `lib/constructs/WebappDistribution.ts`                    | Phase 4 |
+| G10 | **Secrets fetched per call, uncached** — a 100-message worker burst = 100 `GetSecretValue` calls (50 TPS default quota). Add an in-memory TTL cache keyed by ARN (warm-Lambda reuse).                                                                           | `providers/core/secret.ts`                                | Phase 0 |
+| G11 | **In-memory `RateLimiter` is per-instance** — fine once FIFO serializes per-connection work (G3), but document the assumption; cross-connection same-provider limits (one vendor account, N connections) would need a shared bucket (Turso TTL'd table per §5). | `providers/core/rate-limit.ts`                            | Phase 0 |
+| G12 | **Orphaned Secrets Manager secrets** if the OAuth callback fails between `upsertGrantSecret` and connection insert. Weekly cleanup sweep (secrets with no matching connection row).                                                                             | `routes/api.connect.google.callback.ts`, `gsc-connect.ts` | Phase 2 |
+| G13 | **`providerConfig` parsed raw** (`JSON.parse`, no schema) in the sync path — one corrupt row breaks the product's sync loop. Validate via the adapter's config schema at load.                                                                                  | `data/sync.ts:49`                                         | Phase 0 |
+| G14 | **Audit-trail fields dead:** `sync_runs.cursorBefore` never written (can't diagnose cursor regressions). Populate alongside G3/G4.                                                                                                                              | `data/ingest.ts`                                          | Phase 0 |
 
 ### P2 — scheduled cleanup
 
