@@ -1,11 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { connectGscProperties } from '#src/webapp/data/gsc-connect.ts';
+import { resolveUserWorkspace } from '#src/webapp/data/workspace.ts';
+import { getAuth } from '#src/webapp/integrations/auth/server.ts';
 import {
   exchangeCode,
   getGoogleOAuthConfig,
   listSites,
 } from '#src/webapp/integrations/google/oauth.ts';
-import { DEV_DASHBOARD_ID, DEV_PRODUCT_ID } from '#src/webapp/integrations/turso/dev-ids.ts';
 
 const STATE_COOKIE = 'gsc_oauth_state';
 const HTTP_BAD_REQUEST = 400;
@@ -35,6 +36,20 @@ async function handler({ request }: { request: Request }) {
     return new Response('Invalid OAuth state', { status: HTTP_BAD_REQUEST });
   }
 
+  // The connection belongs to the signed-in user's workspace.
+  const auth = await getAuth();
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session?.user) {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: '/login', 'Set-Cookie': clearStateCookie },
+    });
+  }
+  const workspace = await resolveUserWorkspace(session.user.id);
+  if (!workspace) {
+    return new Response('No workspace for user', { status: HTTP_BAD_REQUEST });
+  }
+
   const config = await getGoogleOAuthConfig();
   const { accessToken, refreshToken } = await exchangeCode(config, code);
   if (!refreshToken) {
@@ -46,8 +61,8 @@ async function handler({ request }: { request: Request }) {
 
   const siteUrls = await listSites(accessToken);
   await connectGscProperties({
-    productId: DEV_PRODUCT_ID,
-    dashboardId: DEV_DASHBOARD_ID,
+    productId: workspace.productId,
+    dashboardId: workspace.dashboardId,
     refreshToken,
     clientId: config.clientId,
     clientSecret: config.clientSecret,

@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useState } from 'react';
 import { MetricChart } from '#src/webapp/components/metrics/MetricChart.tsx';
+import { getSessionUser } from '#src/webapp/data/auth.ts';
 import { getConnectionSeries, getDashboardCharts } from '#src/webapp/data/metrics.ts';
 import { syncProduct } from '#src/webapp/data/sync.ts';
 import type { CanonicalMetricKey } from '#src/webapp/integrations/providers/core/types.ts';
-import { DEV_DASHBOARD_ID, DEV_PRODUCT_ID } from '#src/webapp/integrations/turso/dev-ids.ts';
 
 const ONE_DAY_MS = 86_400_000;
 const POLL_MS = 300_000; // 5 min — aligns with ingestion cadence
@@ -13,6 +13,12 @@ const RANGE_OPTIONS = [7, 30, 90] as const;
 const DEFAULT_WINDOW_DAYS = 90;
 
 export const Route = createFileRoute('/dashboard/')({
+  beforeLoad: async () => {
+    const user = await getSessionUser();
+    if (!user) {
+      throw redirect({ to: '/login' });
+    }
+  },
   component: DashboardPage,
 });
 
@@ -49,12 +55,12 @@ function DashboardPage() {
   const [windowDays, setWindowDays] = useState<number>(DEFAULT_WINDOW_DAYS);
 
   const { data: dashboardCharts } = useQuery({
-    queryKey: ['dashboard-charts', DEV_DASHBOARD_ID],
-    queryFn: () => getDashboardCharts({ data: { dashboardId: DEV_DASHBOARD_ID } }),
+    queryKey: ['dashboard-charts'],
+    queryFn: () => getDashboardCharts(),
   });
 
   const sync = useMutation({
-    mutationFn: () => syncProduct({ data: { productId: DEV_PRODUCT_ID } }),
+    mutationFn: () => syncProduct(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-charts'] });
       queryClient.invalidateQueries({ queryKey: ['connection-series'] });

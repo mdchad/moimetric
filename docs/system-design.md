@@ -1,6 +1,6 @@
 # Moimetric — System Design & Architecture
 
-Status: **Draft v1** · Owner: @mdchad · Last updated: 2026-06-09
+Status: **Draft v1.1** (v1 + foundation audit, §14) · Owner: @mdchad · Last updated: 2026-06-10
 
 > This spec maps the target architecture for Moimetric: a **notification-first, cross-source
 > metrics watchdog** for solo devs and small SaaS teams. It builds on the existing adapter
@@ -163,10 +163,21 @@ without rewriting `runIngestion()`.
 - The planner does **no** vendor I/O. It only reads connection rows and fans out. This keeps it
   fast, cheap, and immune to vendor outages.
 
-**Ingest queue** — Amazon SQS standard, with a **dead-letter queue** (maxReceiveCount 3).
+**Ingest queue** — Amazon SQS **FIFO**, `messageGroupId = connectionId`, with a **dead-letter
+queue** (maxReceiveCount 3).
 
 - Decouples planning from execution; absorbs vendor rate limits and bursts.
-- Visibility timeout ≥ 6× the worker's expected runtime.
+- **FIFO-per-connection is a correctness decision, not an ordering nicety.** The audit (§14, G3)
+  found that two concurrent syncs of the same connection race on `incrementalCursor` (last writer
+  wins; the cursor can regress). `messageGroupId = connectionId` serializes all work for one
+  connection at the queue layer — no DB locking, no `SELECT FOR UPDATE` — while different
+  connections still process in parallel. Per-connection serialization also makes the in-memory
+  per-adapter `RateLimiter` sound again (one in-flight worker per connection).
+- **The manual "Sync now" button enqueues to this same queue** instead of running `runIngestion()`
+  inline in the web Lambda. One write path → the race disappears by construction, and a user click
+  can never collide with the scheduler.
+- Visibility timeout ≥ 6× the worker's expected runtime; content-based deduplication off (planner
+  sets an explicit `messageDeduplicationId = connectionId:metricKey:windowStart`).
 
 **Ingest Worker Lambda** (`src/lambda/ingest-worker.ts`)
 
@@ -174,6 +185,17 @@ without rewriting `runIngestion()`.
 - For each message: load adapter via `getAdapter(providerId)`, load secret from Secrets Manager,
   call the **existing** `runIngestion()` with that single work unit, which upserts `metric_points`
   (idempotent) and advances the connection cursor + writes a `sync_runs` row.
+- **Required refactor (§14, G4):** today `runIngestion()` loops _all_ `metricKeys` in one run, so a
+  failure on metric 2 of 4 discards metric 1's watermark and marks the whole run `error`. Narrow it
+  to **one metric per call** to match the planner's per-metric work units; the `sync_runs.status =
+  'partial'` enum value (already in the schema, currently unreachable) becomes meaningful at the
+  connection level.
+- **Retry routing via the existing error taxonomy (§14, G5):** the worker inspects
+  `ProviderError.kind` — `transient`/`rate_limited` → rethrow so SQS redelivers (backoff via
+  visibility timeout); `auth`/`permanent` → mark the message handled, write `sync_runs.error`, and
+  flip the connection to `status = 'error'` so the planner stops re-enqueueing a dead credential
+  instead of retrying it forever. The taxonomy exists (`core/errors.ts`, `isRetryable()`) but is
+  consumed nowhere today — this is where it earns its keep.
 - On success, emit a single **`IngestionCompleted`** domain event to the EventBridge bus
   (`{ productId, connectionId, metricKey, affectedWindow, watermark }`). This is the only coupling
   to detection — fully decoupled, fan-out-friendly.
@@ -396,10 +418,39 @@ to the existing cdk-nag aspects (expect suppressions + a `*.synth.test.ts` snaps
 | `NotificationChannels` | **SES** identity (+ DKIM), optional **SNS** platform application / **Pinpoint**                                                 | Email + mobile push                                                                                         |
 | (web Lambda, extended) | new IAM: DynamoDB R/W on the ephemeral table; `events:PutEvents` on the bus (for MCP `trigger_sync`/`add_annotation`); SES send | MCP + annotation routes live here                                                                           |
 
+Additionally, a `PipelineObservability` construct ships **with Phase 0, not after**: CloudWatch
+alarms on every DLQ depth (> 0), per-Lambda error rate + throttles, EventBridge failed-invocation
+metrics, and one pipeline dashboard. An async pipeline without DLQ alarms fails silently (§14, G7).
+
+**Worker Lambda build path (decision).** The Nitro build only produces the web Lambda; there is
+currently **no mechanism to bundle `src/lambda/*` handlers** (§14, G6 — the biggest practical
+blocker for Phase 0). Decision: use **CDK `NodejsFunction`** (esbuild is already a devDependency) —
+one construct per handler, `entry: 'src/lambda/<name>.ts'`, isolated from the Nitro build. Workers
+import the same `#src/*` application code (adapters, `runIngestion()`, detection core); esbuild
+tree-shakes the webapp out.
+
+**Shared construct helpers (define once, in Phase 0):** a `WorkerLambda` wrapper standardizing
+runtime/memory/log-retention/tracing, the env + Secrets Manager grant plumbing (the
+`TURSO_SECRET_ARN`-style pattern `WebappServer` already uses), and the recurring cdk-nag
+suppressions with templated reasons — so five worker Lambdas don't hand-roll five divergent copies.
+Concurrency posture: web Lambda keeps its reserved 100; the ingest worker gets a **conservative
+reserved cap (start ~20)** so a vendor-API stall can't eat account concurrency; detection/notify
+stay unreserved and monitored.
+
+**Drizzle migrations become a deploy step.** Migrations exist in `drizzle/` but **nothing runs them
+on deploy** (§14, G8) — the first Phase-2 table addition would ship code against missing tables.
+Add `db:migrate` to `_reusable-cdk-deploy.yml` (after build, before `cdk deploy`, using the stage's
+Turso credentials). Simple, observable in CI, no custom-resource magic.
+
+**CloudFront origin read timeout** is explicitly raised to match the 120 s Lambda/API GW timeout
+(default 30 s) — otherwise long MCP tool calls and streamed responses get cut mid-stream (§14, G9).
+
 **Stage lifecycle** (per `.cursor/rules/cdk-stage-lifecycle.mdc`): all new stateful resources
 (SQS, DynamoDB, event bus) follow the ephemeral-vs-permanent removal-policy rules; ephemeral stages
 auto-delete, permanent (`main`/`prod`) retain. No slug logic duplicated — everything flows through
-`lib/stage-name.ts`.
+`lib/stage-name.ts`. Note: cleanup is applied **at app scope** (`bin/app.ts` `RemovalPolicies`), so
+new constructs inherit it implicitly — any per-resource retention exception must be explicit and
+commented in the construct.
 
 **Why these services:** Scheduler (managed cron, no always-on poller), SQS (buffering + retries +
 DLQ for vendor flakiness), EventBridge bus (decoupled fan-out, add-a-consumer extensibility),
@@ -507,9 +558,11 @@ differentiation on top.** The build order follows that, not the architecture dia
 
 1. **Push provider:** Expo Push (matches the RN stack, fastest) vs Amazon SNS/Pinpoint (AWS-native,
    more setup). Recommendation: **Expo first behind the `Notifier` port**, SNS later if needed.
-2. **Auth/identity:** schema notes "ownership moves to better-auth in a later phase." MCP keys and
-   `notification_targets` assume a real user/org model — confirm better-auth lands before/with
-   Phase 2.
+2. **Auth/identity: ~~open~~ RESOLVED.** better-auth has landed (`integrations/auth/`,
+   `data/workspace.ts` with `requireUserWorkspace()`), so MCP keys and `notification_targets` have
+   their user/org model. Two follow-ups remain: (a) two server functions bypass the workspace check
+   today (§14, G1 — fix immediately); (b) workspace resolution picks the user's _first_
+   org/product — a workspace switcher is needed before multi-product users (Phase 1).
 3. **Detection cadence vs ingestion cadence:** detect on every `IngestionCompleted` (responsive,
    more compute) vs a batched detection tick (cheaper, slightly delayed). Recommendation:
    **event-driven for critical-tier sources (Stripe/Sentry), batched for daily-lag sources (GSC).**
@@ -517,6 +570,56 @@ differentiation on top.** The build order follows that, not the architecture dia
    metric store.
 5. **MCP billing:** GSC-Wizard makes MCP free on every plan as acquisition. Confirm same posture
    (free read scope, paid write/volume?) — affects rate-limit defaults.
+
+---
+
+## 14. Foundation gap register (code audit, 2026-06-10)
+
+A three-track audit (providers/ingestion, webapp/data/auth, CDK/infra) against this spec. These are
+the gaps between the architecture above and the code as it stands. **P0 = fix before building on
+top; P1 = fix within the phase that touches it; P2 = scheduled cleanup.** Each entry names the
+phase that owns it.
+
+### P0 — fix before Phase 0/1 work lands on top
+
+| #   | Gap                                                                                                                                                                                                                                            | Where                                                                          | Owner       |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------- |
+| G1  | **Tenancy bypass:** `listConnections` and `createConnection` trust a client-supplied `productId` with no `requireUserWorkspace()` check — cross-tenant read/write. Every other server fn is scoped correctly; these two predate the pattern. | `data/connections.ts:33-78`                                                    | Immediately |
+| G2  | **`dimsHash` is not a hash** — it stores the same JSON string as `dims`, yet it's part of the `metric_points` PK. Misleading name + duplicate-row risk if dims serialization ever changes. Either hash it (sha256) or drop the column from the PK and rename. | `data/ingest.ts:40-52`, `turso/schema.ts`                                      | Phase 0     |
+| G3  | **Concurrent-sync cursor race:** two syncs of one connection both read/write `incrementalCursor`; last writer wins, cursor can regress; crashed runs leave `sync_runs` stuck `running` forever. **Architectural fix is in §6.1** (FIFO queue, `messageGroupId = connectionId`, manual sync enqueues); add a stale-`running` sweep (mark `error` after 1 h). | `data/ingest.ts:93-147`, `data/sync.ts`                                        | Phase 0     |
+| G4  | **Partial-failure watermark loss:** `runIngestion()` loops all metrics; an error on metric N discards metrics 1..N−1's watermarks and marks the run `error`. Narrow to one metric per call (matches §6.1 work units); use the existing-but-unreachable `'partial'` status. | `data/ingest.ts:106-126`                                                       | Phase 0     |
+| G5  | **Error taxonomy defined but consumed nowhere:** `ProviderError.kind` / `isRetryable()` exist, yet `ingest.ts`/`sync.ts` catch everything uniformly — an expired credential retries forever, identical to a transient blip. Wire into the SQS worker per §6.1 (transient → redeliver; auth/permanent → connection `status='error'`, stop re-enqueueing). | `providers/core/errors.ts` vs `data/ingest.ts:140-145`                         | Phase 0     |
+| G6  | **No build path for non-Nitro Lambdas** — `src/lambda/*` handlers have no bundling mechanism at all; Phase 0 is blocked without one. Decision recorded in §8: CDK `NodejsFunction` + esbuild.                                                  | `vite.config.ts`, `lib/constructs/`                                            | Phase 0     |
+| G–  | **`ProviderId` enum lists 4 unimplemented providers** (`stripe`, `revenuecat`, `posthog`, `sentry`) — a connection row created with one of them passes Zod, then `getAdapter()` throws and the whole product sync dies. Guard: planner/sync filter on `registeredProviders()`, and connection creation validates against the registry, not the enum. | `providers/core/types.ts:5-13`, `registry.ts:15-20`                            | Immediately |
+
+### P1 — fix within the owning phase
+
+| #   | Gap                                                                                                                                                                                                                    | Where                                                  | Owner   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------- |
+| G7  | **Zero alarms:** no DLQ-depth, Lambda-error, or EventBridge-failure alarms anywhere. `PipelineObservability` construct ships with Phase 0 (§8).                                                                          | `lib/constructs/`                                      | Phase 0 |
+| G8  | **Migrations never run on deploy** — `drizzle/` exists, deploy workflows don't invoke `db:migrate`; first new table = runtime "no such table" in prod. §8 adds the CI step.                                              | `.github/workflows/_reusable-cdk-deploy.yml`           | Phase 0 |
+| G9  | **CloudFront origin read timeout is default 30 s** while Lambda/API GW allow 120 s — long MCP calls and streams get cut mid-response. Raise explicitly (§8).                                                            | `lib/constructs/WebappDistribution.ts`                 | Phase 4 |
+| G10 | **Secrets fetched per call, uncached** — a 100-message worker burst = 100 `GetSecretValue` calls (50 TPS default quota). Add an in-memory TTL cache keyed by ARN (warm-Lambda reuse).                                   | `providers/core/secret.ts`                             | Phase 0 |
+| G11 | **In-memory `RateLimiter` is per-instance** — fine once FIFO serializes per-connection work (G3), but document the assumption; cross-connection same-provider limits (one vendor account, N connections) would need the DynamoDB bucket. | `providers/core/rate-limit.ts`                         | Phase 0 |
+| G12 | **Orphaned Secrets Manager secrets** if the OAuth callback fails between `upsertGrantSecret` and connection insert. Weekly cleanup sweep (secrets with no matching connection row).                                    | `routes/api.connect.google.callback.ts`, `gsc-connect.ts` | Phase 2 |
+| G13 | **`providerConfig` parsed raw** (`JSON.parse`, no schema) in the sync path — one corrupt row breaks the product's sync loop. Validate via the adapter's config schema at load.                                          | `data/sync.ts:49`                                      | Phase 0 |
+| G14 | **Audit-trail fields dead:** `sync_runs.cursorBefore` never written (can't diagnose cursor regressions). Populate alongside G3/G4.                                                                                      | `data/ingest.ts`                                       | Phase 0 |
+
+### P2 — scheduled cleanup
+
+| #   | Gap                                                                                                                                                                                  | Owner       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| G15 | **Demo code removal:** `routes/demo/*`, `example.guitars`, punk-songs, tRPC todo pass-through, bedrock-budget demo utils (~15% of webapp) — confusing surface for the build-out.     | Pre-Phase 1 |
+| G16 | **No tests on the hot path:** `ingest.ts`/`sync.ts` have zero coverage (adapters have some). The G2–G5 fixes are exactly the behaviors that need regression tests — write them together. | Phase 0     |
+| G17 | **Detection-profile fields not yet on the port:** add the optional `seasonality` / `alertable` / `direction` / `defaultSeverity` fields (§6.3) to `ProviderCapabilities`/`CanonicalMetric` early so Phase 1 adapters (Stripe/RevenueCat) declare them from day one. | Phase 1     |
+| G18 | **Secret values can leak into errors:** Google token-exchange failure embeds the raw response body; OAuth error paths should log status + generic message only.                      | Phase 0     |
+| G19 | **`as` casts on catalog/registry key mappings** — replace with `satisfies`-checked records so a metrics/canonical mismatch fails at compile time, not runtime.                       | Pre-Phase 1 |
+| G20 | **Synth snapshot growth:** Phase 0 roughly doubles the CDK snapshot; split snapshots per concern (web vs pipeline) or document a section-by-section review process before it balloons. | Phase 0     |
+
+**Verdict on the three core invariants:** adapter purity — **upheld** (no adapter imports outside
+`providers/core/*`); 4-file provider contract — **at risk** only via the stale enum entries (G–);
+ingestion idempotency — **upheld for `metric_points`, compromised at the cursor/audit layer**
+(G3/G4/G14), which is precisely what the Phase 0 queue design fixes.
 
 ---
 

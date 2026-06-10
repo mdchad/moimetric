@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { authClient } from '#src/webapp/integrations/auth/client.ts';
 import TanChatAIAssistant from './example-AIAssistant.tsx';
 
 export default function Header() {
@@ -265,9 +266,50 @@ export default function Header() {
         </nav>
 
         <div className="p-4 border-t border-gray-700 bg-gray-800 flex flex-col gap-2">
+          <AuthSection />
           <TanChatAIAssistant />
         </div>
       </aside>
     </>
+  );
+}
+
+function AuthSection() {
+  const { data: session, isPending } = authClient.useSession();
+
+  if (isPending) {
+    return null;
+  }
+
+  if (!session?.user) {
+    return (
+      <Link
+        to="/login"
+        className="rounded-lg bg-blue-600 px-3 py-2 text-center text-sm font-medium text-white hover:bg-blue-700"
+      >
+        Sign in
+      </Link>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-2 text-sm text-gray-300">
+      <span className="truncate">{session.user.email}</span>
+      <button
+        type="button"
+        onClick={() =>
+          authClient.signOut({
+            fetchOptions: {
+              onSuccess: () => {
+                window.location.href = '/login';
+              },
+            },
+          })
+        }
+        className="shrink-0 rounded-md px-2 py-1 text-gray-400 hover:bg-gray-700 hover:text-white"
+      >
+        Sign out
+      </button>
+    </div>
   );
 }

@@ -8,6 +8,13 @@
       "when": 1780979923861,
       "tag": "0000_volatile_valkyrie",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1781016790733,
+      "tag": "0001_late_living_tribunal",
+      "breakpoints": true
     }
   ]
 }

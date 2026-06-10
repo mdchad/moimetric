@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start';
 import { and, asc, eq, gte, inArray, lt } from 'drizzle-orm';
 import { z } from 'zod';
+import { requireUserWorkspace } from '#src/webapp/data/session.server.ts';
 import { CANONICAL_METRICS } from '#src/webapp/integrations/providers/core/catalog.ts';
 import {
   CanonicalMetricKey,
@@ -9,11 +10,10 @@ import {
   type MetricUnit,
 } from '#src/webapp/integrations/providers/core/types.ts';
 import { getDb } from '#src/webapp/integrations/turso/db.ts';
-import { charts, metricPoints } from '#src/webapp/integrations/turso/schema.ts';
+import { charts, metricPoints, sourceConnections } from '#src/webapp/integrations/turso/schema.ts';
 
-// NOTE: tenant scoping (org membership) is intentionally deferred — the app is
-// gated behind the seeded dev org until better-auth lands. Once it does, these
-// handlers must verify membership before querying.
+// All handlers are tenant-scoped via requireUserWorkspace() — they resolve the
+// signed-in user's workspace and never trust client-supplied org/product ids.
 
 const DEFAULT_MAX_POINTS = 500;
 
@@ -56,48 +56,6 @@ const downsample = (points: SeriesPoint[], kind: MetricKind, maxPoints: number):
   return out;
 };
 
-const MetricSeriesQuery = z.object({
-  connectionId: z.string().min(1),
-  metricKey: CanonicalMetricKey,
-  granularity: Granularity.default('day'),
-  start: z.number().int(),
-  end: z.number().int(),
-  maxPoints: z.number().int().positive().default(DEFAULT_MAX_POINTS),
-});
-
-export interface MetricSeriesResult {
-  unit: MetricUnit;
-  label: string;
-  points: SeriesPoint[];
-}
-
-export const getMetricSeries = createServerFn({ method: 'POST' })
-  .inputValidator((data: unknown) => MetricSeriesQuery.parse(data))
-  .handler(async ({ data }): Promise<MetricSeriesResult> => {
-    const db = await getDb();
-    const rows = await db
-      .select({ bucketTs: metricPoints.bucketTs, value: metricPoints.value })
-      .from(metricPoints)
-      .where(
-        and(
-          eq(metricPoints.connectionId, data.connectionId),
-          eq(metricPoints.metricKey, data.metricKey),
-          eq(metricPoints.granularity, data.granularity),
-          eq(metricPoints.dimsHash, ''),
-          gte(metricPoints.bucketTs, data.start),
-          lt(metricPoints.bucketTs, data.end),
-        ),
-      )
-      .orderBy(asc(metricPoints.bucketTs));
-
-    const meta = CANONICAL_METRICS[data.metricKey];
-    return {
-      unit: meta.unit,
-      label: meta.label,
-      points: downsample(rows, meta.kind, data.maxPoints),
-    };
-  });
-
 const ConnectionSeriesQuery = z.object({
   connectionId: z.string().min(1),
   metricKeys: z.array(CanonicalMetricKey).min(1),
@@ -114,12 +72,29 @@ export interface MetricSeries {
   points: SeriesPoint[];
 }
 
+const emptySeries = (metricKey: CanonicalMetricKey): MetricSeries => {
+  const meta = CANONICAL_METRICS[metricKey];
+  return { metricKey, label: meta.label, unit: meta.unit, points: [] };
+};
+
 // Multiple metrics for one connection in a single query — powers a consolidated
 // per-domain chart (e.g. clicks + impressions on dual axes).
 export const getConnectionSeries = createServerFn({ method: 'POST' })
   .inputValidator((data: unknown) => ConnectionSeriesQuery.parse(data))
   .handler(async ({ data }): Promise<{ series: MetricSeries[] }> => {
+    const { productId } = await requireUserWorkspace();
     const db = await getDb();
+
+    // Ownership check: the connection must belong to the caller's product.
+    const [owned] = await db
+      .select({ productId: sourceConnections.productId })
+      .from(sourceConnections)
+      .where(eq(sourceConnections.id, data.connectionId))
+      .limit(1);
+    if (!owned || owned.productId !== productId) {
+      return { series: data.metricKeys.map((metricKey) => emptySeries(metricKey)) };
+    }
+
     const rows = await db
       .select({
         metricKey: metricPoints.metricKey,
@@ -159,8 +134,6 @@ export const getConnectionSeries = createServerFn({ method: 'POST' })
     return { series };
   });
 
-const DashboardChartsQuery = z.object({ dashboardId: z.string().min(1) });
-
 export interface DashboardChart {
   id: string;
   connectionId: string;
@@ -170,14 +143,14 @@ export interface DashboardChart {
   vizConfig: string;
 }
 
-export const getDashboardCharts = createServerFn({ method: 'POST' })
-  .inputValidator((data: unknown) => DashboardChartsQuery.parse(data))
-  .handler(async ({ data }): Promise<DashboardChart[]> => {
+export const getDashboardCharts = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<DashboardChart[]> => {
+    const { dashboardId } = await requireUserWorkspace();
     const db = await getDb();
     const rows = await db
       .select()
       .from(charts)
-      .where(eq(charts.dashboardId, data.dashboardId))
+      .where(eq(charts.dashboardId, dashboardId))
       .orderBy(asc(charts.sortOrder));
 
     return rows.flatMap((row) => {
@@ -196,4 +169,5 @@ export const getDashboardCharts = createServerFn({ method: 'POST' })
         },
       ];
     });
-  });
+  },
+);
