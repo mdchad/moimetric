@@ -6,4 +6,6 @@ export type { SessionUser };
 // Client-callable: returns the signed-in user (or null). The server-only
 // readSessionUser is referenced only inside this handler, so it's stripped from
 // the client bundle.
-export const getSessionUser = createServerFn({ method: 'GET' }).handler(async () => readSessionUser());
+export const getSessionUser = createServerFn({ method: 'GET' }).handler(async () =>
+  readSessionUser(),
+);

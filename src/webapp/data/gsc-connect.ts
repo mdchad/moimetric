@@ -58,7 +58,7 @@ export interface ConnectGscArgs {
 
 export const connectGscProperties = async (
   args: ConnectGscArgs,
-): Promise<{ connected: number }> => {
+): Promise<{ connected: number; connectionIds: string[] }> => {
   const credSecretArn = await upsertGrantSecret(args.productId, {
     refreshToken: args.refreshToken,
     clientId: args.clientId,
@@ -66,9 +66,11 @@ export const connectGscProperties = async (
   });
 
   const db = await getDb();
+  const connectionIds: string[] = [];
   let sortOrder = 0;
   for (const siteUrl of args.siteUrls) {
     const connectionId = `gsc-${args.productId}-${slug(siteUrl)}`;
+    connectionIds.push(connectionId);
     // oxlint-disable-next-line no-await-in-loop
     await db
       .insert(sourceConnections)
@@ -103,5 +105,5 @@ export const connectGscProperties = async (
     }
   }
 
-  return { connected: args.siteUrls.length };
+  return { connected: args.siteUrls.length, connectionIds };
 };

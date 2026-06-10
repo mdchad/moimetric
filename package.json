@@ -36,6 +36,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.1014.0",
     "@aws-sdk/client-cloudwatch": "^3.1014.0",
     "@aws-sdk/client-secrets-manager": "^3.1062.0",
+    "@aws-sdk/client-sqs": "^3.1062.0",
     "@libsql/client": "^0.17.3",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.2.2",

@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { connectGscProperties } from '#src/webapp/data/gsc-connect.ts';
+import { requestConnectionSync } from '#src/webapp/data/sync-trigger.ts';
 import { resolveUserWorkspace } from '#src/webapp/data/workspace.ts';
 import { getAuth } from '#src/webapp/integrations/auth/server.ts';
 import {
@@ -60,7 +61,7 @@ async function handler({ request }: { request: Request }) {
   }
 
   const siteUrls = await listSites(accessToken);
-  await connectGscProperties({
+  const { connectionIds } = await connectGscProperties({
     productId: workspace.productId,
     dashboardId: workspace.dashboardId,
     refreshToken,
@@ -68,6 +69,15 @@ async function handler({ request }: { request: Request }) {
     clientSecret: config.clientSecret,
     siteUrls,
   });
+
+  // Auto-sync: data starts flowing without a manual "Sync now". Deployed, this
+  // enqueues to the ingestion queue (fast); local dev syncs inline. A sync
+  // failure must not fail the connect — the hourly schedule will catch up.
+  try {
+    await requestConnectionSync(connectionIds);
+  } catch (error) {
+    console.error('auto-sync after GSC connect failed', String(error));
+  }
 
   return new Response(null, {
     status: 302,
