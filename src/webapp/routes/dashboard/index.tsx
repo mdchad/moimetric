@@ -96,6 +96,12 @@ function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/architecture"
+            className="px-2 py-2 text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+          >
+            Architecture
+          </a>
           <div className="flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700">
             {RANGE_OPTIONS.map((days) => (
               <button
